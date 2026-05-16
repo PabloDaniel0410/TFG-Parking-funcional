@@ -65,7 +65,7 @@ fun ProfileScreen(navController: NavController) {
             HorizontalDivider()
             Spacer(Modifier.height(16.dp))
 
-            ProfileMenuItem(Icons.Default.Edit,    "Editar perfil")     { /* TODO */ }
+            ProfileMenuItem(Icons.Default.Edit,    "Editar perfil")     { navController.navigate(Screen.EditProfile.route) }
             ProfileMenuItem(Icons.Default.History, "Historial")         { navController.navigate(Screen.History.route) }
             ProfileMenuItem(Icons.Default.Favorite,"Favoritos")         { navController.navigate(Screen.Favourites.route) }
             ProfileMenuItem(Icons.Default.Settings,"Configuración")     { navController.navigate(Screen.Settings.route) }

@@ -2,32 +2,35 @@ package com.example.tfg_parking.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.example.tfg_parking.data.model.ParkingSpot
 import com.example.tfg_parking.ui.screens.auth.LoginScreen
 import com.example.tfg_parking.ui.screens.auth.RegisterScreen
+import com.example.tfg_parking.ui.screens.booking.BookingScreen
 import com.example.tfg_parking.ui.screens.home.HomeScreen
-import com.example.tfg_parking.ui.screens.secondary.FavouritesScreen
-import com.example.tfg_parking.ui.screens.secondary.HistoryScreen
-import com.example.tfg_parking.ui.screens.profile.ProfileScreen
-import com.example.tfg_parking.ui.screens.settings.SettingsScreen
+import com.example.tfg_parking.ui.screens.legal.AboutScreen
 import com.example.tfg_parking.ui.screens.legal.PrivacyScreen
 import com.example.tfg_parking.ui.screens.legal.TermsScreen
-import com.example.tfg_parking.ui.screens.legal.AboutScreen
+import com.example.tfg_parking.ui.screens.profile.EditProfileScreen
+import com.example.tfg_parking.ui.screens.profile.ProfileScreen
+import com.example.tfg_parking.ui.screens.secondary.FavouritesScreen
+import com.example.tfg_parking.ui.screens.secondary.HistoryScreen
+import com.example.tfg_parking.ui.screens.settings.SettingsScreen
+import kotlinx.serialization.json.Json
 
 @Composable
 fun NavGraph(
     navController: NavHostController,
     startDestination: String = Screen.Login.route
 ) {
-    NavHost(
-        navController = navController,
-        startDestination = startDestination
-    ) {
-        // ── Auth ──────────────────────────────────────────────────────────
+    NavHost(navController = navController, startDestination = startDestination) {
+
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoginSuccess  = { navController.navigate(Screen.Home.route) {
+                onLoginSuccess       = { navController.navigate(Screen.Home.route) {
                     popUpTo(Screen.Login.route) { inclusive = true }
                 }},
                 onNavigateToRegister = { navController.navigate(Screen.Register.route) }
@@ -42,35 +45,42 @@ fun NavGraph(
             )
         }
 
-        // ── Principal ─────────────────────────────────────────────────────
         composable(Screen.Home.route) {
-            HomeScreen(navController = navController)
-        }
-
-        // ── Secundarias ───────────────────────────────────────────────────
-        composable(Screen.Favourites.route) {
-            FavouritesScreen(navController = navController)
-        }
-        composable(Screen.History.route) {
-            HistoryScreen(navController = navController)
-        }
-
-        // ── Perfil & Ajustes ──────────────────────────────────────────────
-        composable(Screen.Profile.route) {
-            ProfileScreen(navController = navController)
-        }
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                navController   = navController,
-                onNavigateToPrivacy = { navController.navigate(Screen.Privacy.route) },
-                onNavigateToTerms   = { navController.navigate(Screen.Terms.route)   },
-                onNavigateToAbout   = { navController.navigate(Screen.About.route)   }
+            HomeScreen(
+                navController = navController,
+                onReserveSpot = { spot ->
+                    val json = java.net.URLEncoder.encode(Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
+                    navController.navigate("${Screen.Booking.route}/$json")
+                }
             )
         }
 
-        // ── Legales ───────────────────────────────────────────────────────
+        composable(
+            route     = "${Screen.Booking.route}/{spotJson}",
+            arguments = listOf(navArgument("spotJson") { type = NavType.StringType })
+        ) { backStack ->
+            val raw  = backStack.arguments?.getString("spotJson") ?: ""
+            val spot = Json.decodeFromString(ParkingSpot.serializer(),
+                java.net.URLDecoder.decode(raw, "UTF-8"))
+            BookingScreen(spot = spot, navController = navController)
+        }
+
+        composable(Screen.Favourites.route)  { FavouritesScreen(navController) }
+        composable(Screen.History.route)     { HistoryScreen(navController) }
+        composable(Screen.Profile.route)     { ProfileScreen(navController) }
+        composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                navController       = navController,
+                onNavigateToPrivacy = { navController.navigate(Screen.Privacy.route) },
+                onNavigateToTerms   = { navController.navigate(Screen.Terms.route) },
+                onNavigateToAbout   = { navController.navigate(Screen.About.route) }
+            )
+        }
+
         composable(Screen.Privacy.route) { PrivacyScreen(navController) }
-        composable(Screen.Terms.route)   { TermsScreen(navController)   }
-        composable(Screen.About.route)   { AboutScreen(navController)   }
+        composable(Screen.Terms.route)   { TermsScreen(navController) }
+        composable(Screen.About.route)   { AboutScreen(navController) }
     }
 }

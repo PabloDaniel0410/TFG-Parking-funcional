@@ -37,6 +37,7 @@ private const val MAP_FRAGMENT_TAG = "HOME_MAP_FRAGMENT"
 @Composable
 fun HomeScreen(
     navController: NavController,
+    onReserveSpot: (ParkingSpot) -> Unit = {},
     vm: HomeViewModel = viewModel()
 ) {
     val state       by vm.uiState.collectAsState()
@@ -110,6 +111,7 @@ fun HomeScreen(
                 SpotBottomCard(
                     spot      = spot,
                     onDismiss = { selectedSpot = null },
+                    onReserve = { onReserveSpot(spot) },
                     modifier  = Modifier.align(Alignment.BottomCenter)
                 )
             }
@@ -145,13 +147,13 @@ fun MapView(
         googleMap?.let { map ->
             map.clear()
             spots.forEach { spot ->
-                val pos = LatLng(spot.latitude, spot.longitude)
+                val pos = LatLng(spot.lat, spot.lng)
                 val marker = map.addMarker(
                     MarkerOptions()
                         .position(pos)
                         .title(spot.name)
                         .icon(
-                            if (spot.available)
+                            if (spot.isAvailable)
                                 BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
                             else
                                 BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
@@ -236,11 +238,7 @@ private fun addSpotMarkers(
 // Tarjeta inferior con info de la plaza seleccionada
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun SpotBottomCard(
-    spot:     ParkingSpot,
-    onDismiss: () -> Unit,
-    modifier:  Modifier = Modifier
-) {
+private fun SpotBottomCard(spot: ParkingSpot, onDismiss: () -> Unit, onReserve: () -> Unit, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier
             .fillMaxWidth()
@@ -286,7 +284,7 @@ private fun SpotBottomCard(
             if (spot.isAvailable) {
                 Spacer(Modifier.height(8.dp))
                 Button(
-                    onClick  = { /* TODO: implementar reserva */ },
+                    onClick  = onReserve,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.BookmarkAdd, null)
