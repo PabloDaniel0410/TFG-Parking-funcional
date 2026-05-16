@@ -1,6 +1,6 @@
 package com.example.tfg_parking.ui.screens.home
 
-import android.view.View
+
 import android.widget.FrameLayout
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -25,6 +25,10 @@ import com.google.android.gms.maps.SupportMapFragment
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import com.example.tfg_parking.R
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.compose.runtime.DisposableEffect
 
 // ─── ID estable para el fragment (no usar View.generateViewId() — no es estable) ───
 private const val MAP_FRAGMENT_TAG = "HOME_MAP_FRAGMENT"
@@ -129,66 +133,71 @@ fun HomeScreen(
 // Composable que aloja SupportMapFragment mediante AndroidView
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
-private fun MapView(
-    spots:       List<ParkingSpot>,
+fun MapView(
+    spots: List<ParkingSpot>,
     onSpotClick: (ParkingSpot) -> Unit,
-    modifier:    Modifier = Modifier
+    modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
+    val mapView = rememberMapViewWithLifecycle()
+    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
 
-    // Referencia al GoogleMap para actualizar marcadores cuando cambian los spots
-    val mapRef = remember { mutableStateOf<GoogleMap?>(null) }
-
-    // Cada vez que cambia la lista de spots, repintamos los marcadores
-    LaunchedEffect(spots) {
-        mapRef.value?.let { gMap ->
-            gMap.clear()
-            addSpotMarkers(gMap, spots, onSpotClick)
+    LaunchedEffect(spots, googleMap) {
+        googleMap?.let { map ->
+            map.clear()
+            spots.forEach { spot ->
+                val pos = LatLng(spot.latitude, spot.longitude)
+                val marker = map.addMarker(
+                    MarkerOptions()
+                        .position(pos)
+                        .title(spot.name)
+                        .icon(
+                            if (spot.available)
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                            else
+                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                        )
+                )
+                marker?.tag = spot
+            }
+            map.setOnMarkerClickListener { marker ->
+                (marker.tag as? ParkingSpot)?.let { onSpotClick(it) }
+                true
+            }
         }
     }
 
     AndroidView(
-        modifier = modifier,
-        factory  = { ctx ->
-            // Creamos un FrameLayout con ID para que el FragmentManager lo encuentre
-            FrameLayout(ctx).apply {
-                id = View.generateViewId()
-
-                // Obtenemos el FragmentManager desde la Activity
-                val activity    = ctx as FragmentActivity
-                val fragmentMgr = activity.supportFragmentManager
-
-                // Reutilizamos el fragment si ya existe (rotación de pantalla, etc.)
-                var mapFragment = fragmentMgr
-                    .findFragmentByTag(MAP_FRAGMENT_TAG) as? SupportMapFragment
-
-                if (mapFragment == null) {
-                    mapFragment = SupportMapFragment.newInstance()
-                    fragmentMgr.beginTransaction()
-                        .add(this.id, mapFragment, MAP_FRAGMENT_TAG)
-                        .commitNow()
-                }
-
-                mapFragment.getMapAsync(OnMapReadyCallback { gMap ->
-                    mapRef.value = gMap
-
-                    // Cámara inicial — Valencia, España
-                    val valencia = LatLng(39.4699, -0.3763)
-                    gMap.moveCamera(CameraUpdateFactory.newLatLngZoom(valencia, 13f))
-
-                    // Configuración UI
-                    gMap.uiSettings.apply {
-                        isZoomControlsEnabled     = true
-                        isMyLocationButtonEnabled = false // requiere permiso en runtime
-                        isMapToolbarEnabled       = true
-                    }
-
-                    // Pintamos los spots que ya haya al abrirse el mapa
-                    addSpotMarkers(gMap, spots, onSpotClick)
-                })
-            }
+        factory = { mapView },
+        modifier = modifier
+    ) { mv ->
+        mv.getMapAsync { map ->
+            googleMap = map
+            map.moveCamera(
+                CameraUpdateFactory.newLatLngZoom(LatLng(39.4699, -0.3763), 13f)
+            )
         }
-    )
+    }
+}
+
+@Composable
+fun rememberMapViewWithLifecycle(): com.google.android.gms.maps.MapView {
+    val context = LocalContext.current
+    val mapView = remember { com.google.android.gms.maps.MapView(context) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+
+    DisposableEffect(lifecycle) {
+        val observer = object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onCreate(owner: androidx.lifecycle.LifecycleOwner) = mapView.onCreate(null)
+            override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = mapView.onStart()
+            override fun onResume(owner: androidx.lifecycle.LifecycleOwner) = mapView.onResume()
+            override fun onPause(owner: androidx.lifecycle.LifecycleOwner) = mapView.onPause()
+            override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = mapView.onStop()
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) = mapView.onDestroy()
+        }
+        lifecycle.addObserver(observer)
+        onDispose { lifecycle.removeObserver(observer) }
+    }
+    return mapView
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
