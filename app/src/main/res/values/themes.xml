@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        AppCompatActivity requiere un tema descendiente de Theme.AppCompat.
+        NoActionBar es obligatorio porque Compose gestiona su propia TopAppBar.
+    -->
+    <style name="Theme.TFGParking" parent="Theme.AppCompat.Light.NoActionBar" />
+</resources>
