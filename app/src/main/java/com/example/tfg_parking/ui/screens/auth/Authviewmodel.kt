@@ -2,7 +2,7 @@ package com.example.tfg_parking.ui.screens.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.tfg_parking.data.remote.SupabaseClient
+import com.example.tfg_parking.data.remote.Supabase
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +20,8 @@ class AuthViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState
 
-    private val auth = SupabaseClient.client.auth
+    private val auth = Supabase.client.auth
+
 
     fun login(email: String, password: String) {
         viewModelScope.launch {

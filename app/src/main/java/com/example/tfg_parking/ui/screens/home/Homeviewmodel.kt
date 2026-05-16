@@ -3,7 +3,7 @@ package com.example.tfg_parking.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.tfg_parking.data.model.ParkingSpot
-import com.example.tfg_parking.data.remote.SupabaseClient
+import com.example.tfg_parking.data.remote.Supabase
 import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +26,7 @@ class HomeViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = HomeUiState(isLoading = true)
             try {
-                val spots = SupabaseClient.client
+                val spots = Supabase.client
                     .postgrest["parking_spots"]
                     .select()
                     .decodeList<ParkingSpot>()
