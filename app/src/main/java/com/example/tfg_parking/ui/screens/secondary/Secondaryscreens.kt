@@ -91,7 +91,7 @@ private fun FavouriteCard(favourite: Favourite, onRemove: () -> Unit) {
                     Text(favourite.address, style = MaterialTheme.typography.bodySmall)
             }
             IconButton(onClick = onRemove) {
-                Icon(Icons.Default.FavoriteSharp, null, tint = MaterialTheme.colorScheme.error)
+                Icon(Icons.Default.Favorite, null, tint = MaterialTheme.colorScheme.error)
             }
         }
     }
