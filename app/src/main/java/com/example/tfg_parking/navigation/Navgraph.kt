@@ -53,7 +53,7 @@ fun NavGraph(
                 onReserveSpot = { spot ->
                     val json = java.net.URLEncoder.encode(
                         Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
-                    navController.navigate("${Screen.Booking.route}/${spot.id}")
+                    navController.navigate("${Screen.Booking.route}/${spotId.id}")
                 }
             )
         }
