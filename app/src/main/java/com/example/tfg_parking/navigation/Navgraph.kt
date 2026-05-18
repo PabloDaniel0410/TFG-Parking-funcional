@@ -14,11 +14,13 @@ import com.example.tfg_parking.ui.screens.home.HomeScreen
 import com.example.tfg_parking.ui.screens.legal.AboutScreen
 import com.example.tfg_parking.ui.screens.legal.PrivacyScreen
 import com.example.tfg_parking.ui.screens.legal.TermsScreen
+import com.example.tfg_parking.ui.screens.payment.PaymentMethodsScreen
 import com.example.tfg_parking.ui.screens.profile.EditProfileScreen
 import com.example.tfg_parking.ui.screens.profile.ProfileScreen
 import com.example.tfg_parking.ui.screens.secondary.FavouritesScreen
 import com.example.tfg_parking.ui.screens.secondary.HistoryScreen
 import com.example.tfg_parking.ui.screens.settings.SettingsScreen
+import com.example.tfg_parking.ui.screens.vehicles.VehiclesScreen
 import kotlinx.serialization.json.Json
 
 @Composable
@@ -49,7 +51,8 @@ fun NavGraph(
             HomeScreen(
                 navController = navController,
                 onReserveSpot = { spot ->
-                    val json = java.net.URLEncoder.encode(Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
+                    val json = java.net.URLEncoder.encode(
+                        Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
                     navController.navigate("${Screen.Booking.route}/$json")
                 }
             )
@@ -65,10 +68,12 @@ fun NavGraph(
             BookingScreen(spot = spot, navController = navController)
         }
 
-        composable(Screen.Favourites.route)  { FavouritesScreen(navController) }
-        composable(Screen.History.route)     { HistoryScreen(navController) }
-        composable(Screen.Profile.route)     { ProfileScreen(navController) }
-        composable(Screen.EditProfile.route) { EditProfileScreen(navController) }
+        composable(Screen.Favourites.route)     { FavouritesScreen(navController) }
+        composable(Screen.History.route)        { HistoryScreen(navController) }
+        composable(Screen.Profile.route)        { ProfileScreen(navController) }
+        composable(Screen.EditProfile.route)    { EditProfileScreen(navController) }
+        composable(Screen.Vehicles.route)       { VehiclesScreen(navController) }
+        composable(Screen.PaymentMethods.route) { PaymentMethodsScreen(navController) }
 
         composable(Screen.Settings.route) {
             SettingsScreen(

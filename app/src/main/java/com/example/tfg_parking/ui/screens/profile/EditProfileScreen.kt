@@ -1,6 +1,8 @@
 package com.example.tfg_parking.ui.screens.profile
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -22,15 +24,16 @@ fun EditProfileScreen(
     vm: EditProfileViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
-    val user = remember { Supabase.client.auth.currentUserOrNull() }
+    val user  = remember { Supabase.client.auth.currentUserOrNull() }
 
+    var displayName     by remember { mutableStateOf("") }
+    var phone           by remember { mutableStateOf("") }
     var newPassword     by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword    by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.isSuccess) {
-        if (state.isSuccess) navController.popBackStack()
-    }
+    LaunchedEffect(Unit) { vm.loadProfile { dn, ph -> displayName = dn; phone = ph } }
+    LaunchedEffect(state.isSuccess) { if (state.isSuccess) navController.popBackStack() }
 
     Scaffold(
         topBar = {
@@ -45,9 +48,16 @@ fun EditProfileScreen(
         }
     ) { padding ->
         Column(
-            Modifier.fillMaxSize().padding(padding).padding(24.dp),
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Text("Información personal", style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary)
+
             OutlinedTextField(
                 value = user?.email ?: "",
                 onValueChange = {},
@@ -56,9 +66,24 @@ fun EditProfileScreen(
                 modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Default.Email, null) }
             )
+            OutlinedTextField(
+                value = displayName,
+                onValueChange = { displayName = it },
+                label = { Text("Nombre visible") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Default.Badge, null) }
+            )
+            OutlinedTextField(
+                value = phone,
+                onValueChange = { phone = it },
+                label = { Text("Teléfono") },
+                modifier = Modifier.fillMaxWidth(),
+                leadingIcon = { Icon(Icons.Default.Phone, null) }
+            )
 
             HorizontalDivider()
-            Text("Cambiar contraseña", style = MaterialTheme.typography.titleSmall)
+            Text("Cambiar contraseña", style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary)
 
             OutlinedTextField(
                 value = newPassword,
@@ -75,7 +100,6 @@ fun EditProfileScreen(
                 visualTransformation = if (showPassword) VisualTransformation.None
                 else PasswordVisualTransformation()
             )
-
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it },
@@ -90,12 +114,12 @@ fun EditProfileScreen(
                     style = MaterialTheme.typography.bodySmall)
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(8.dp))
 
             Button(
-                onClick = { vm.updatePassword(newPassword, confirmPassword) },
+                onClick = { vm.saveAll(displayName, phone, newPassword, confirmPassword) },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading && newPassword.isNotBlank()
+                enabled = !state.isLoading
             ) {
                 if (state.isLoading) {
                     CircularProgressIndicator(Modifier.size(18.dp),

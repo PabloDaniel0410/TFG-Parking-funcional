@@ -9,7 +9,11 @@ data class ParkingSpot(
     val name: String = "",
     val lat: Double = 0.0,
     val lng: Double = 0.0,
-    @SerialName("is_available") val isAvailable: Boolean = true,
-    @SerialName("price_per_hour") val pricePerHour: Double = 0.0,
-    val address: String = ""
+    @SerialName("is_available")   val isAvailable:  Boolean = true,
+    @SerialName("price_per_hour") val pricePerHour: Double  = 0.0,
+    val address: String = "",
+    @SerialName("spot_type")      val spotType:     String  = "normal",
+    // 'normal' | 'disabled' | 'electric'
+    val zone: String = "centro"
+    // 'centro' | 'medio' | 'periferia'
 )
