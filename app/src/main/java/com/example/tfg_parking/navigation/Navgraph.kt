@@ -1,5 +1,6 @@
 package com.example.tfg_parking.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -32,17 +33,22 @@ fun NavGraph(
 
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoginSuccess       = { navController.navigate(Screen.Home.route) {
-                    popUpTo(Screen.Login.route) { inclusive = true }
-                }},
+                onLoginSuccess       = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
                 onNavigateToRegister = { navController.navigate(Screen.Register.route) }
             )
         }
+
         composable(Screen.Register.route) {
             RegisterScreen(
-                onRegisterSuccess = { navController.navigate(Screen.Home.route) {
-                    popUpTo(Screen.Login.route) { inclusive = true }
-                }},
+                onRegisterSuccess = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
                 onNavigateToLogin = { navController.popBackStack() }
             )
         }
@@ -51,19 +57,24 @@ fun NavGraph(
             HomeScreen(
                 navController = navController,
                 onReserveSpot = { spot ->
-                    val json = java.net.URLEncoder.encode(
-                        Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
-                    navController.navigate("${Screen.Booking.route}/${spotId.id}")
+                    // Uri.encode es más seguro que URLEncoder con Compose Navigation
+                    val json = Uri.encode(Json.encodeToString(ParkingSpot.serializer(), spot))
+                    navController.navigate("${Screen.Booking.route}/$json")
                 }
             )
         }
 
         composable(
-            route = "${Screen.Booking.route}/{spotId}",
-            arguments = listOf(navArgument("spotId") { type = NavType.IntType })
+            route     = "${Screen.Booking.route}/{spotJson}",
+            arguments = listOf(navArgument("spotJson") { type = NavType.StringType })
         ) { backStack ->
-            val spotId = backStack.arguments?.getInt("spotId") ?: return@composable
-            BookingScreen(spotId = spotId, navController = navController)
+            val raw  = backStack.arguments?.getString("spotJson") ?: ""
+            // runCatching evita crash si el JSON llega malformado
+            val spot = runCatching {
+                Json.decodeFromString(ParkingSpot.serializer(), raw)
+            }.getOrNull() ?: return@composable
+
+            BookingScreen(spot = spot, navController = navController)
         }
 
         composable(Screen.Favourites.route)     { FavouritesScreen(navController) }
