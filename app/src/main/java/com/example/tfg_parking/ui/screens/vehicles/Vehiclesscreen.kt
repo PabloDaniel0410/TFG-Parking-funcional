@@ -59,6 +59,7 @@ class VehiclesViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val uid = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
+
                 Supabase.client.postgrest["vehicles"].insert(buildJsonObject {
                     put("user_id",      uid)
                     put("plate",        plate.uppercase())

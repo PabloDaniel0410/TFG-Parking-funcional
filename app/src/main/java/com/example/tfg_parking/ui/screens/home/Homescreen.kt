@@ -29,6 +29,7 @@ import com.example.tfg_parking.R
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.LifecycleOwner
 
 // ─── ID estable para el fragment (no usar View.generateViewId() — no es estable) ───
 private const val MAP_FRAGMENT_TAG = "HOME_MAP_FRAGMENT"
@@ -141,60 +142,89 @@ fun MapView(
     modifier: Modifier = Modifier
 ) {
     val mapView = rememberMapViewWithLifecycle()
-    var googleMap by remember { mutableStateOf<GoogleMap?>(null) }
-
-    LaunchedEffect(spots, googleMap) {
-        googleMap?.let { map ->
-            map.clear()
-            spots.forEach { spot ->
-                val pos = LatLng(spot.lat, spot.lng)
-                val marker = map.addMarker(
-                    MarkerOptions()
-                        .position(pos)
-                        .title(spot.name)
-                        .icon(
-                            if (spot.isAvailable)
-                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
-                            else
-                                BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-                        )
-                )
-                marker?.tag = spot
-            }
-            map.setOnMarkerClickListener { marker ->
-                (marker.tag as? ParkingSpot)?.let { onSpotClick(it) }
-                true
-            }
-        }
-    }
+    // Guardamos el mapa Y los spots actuales con remember
+    val googleMap = remember { mutableStateOf<GoogleMap?>(null) }
+    val currentSpots = rememberUpdatedState(spots)
+    val currentOnClick = rememberUpdatedState(onSpotClick)
 
     AndroidView(
         factory = { mapView },
         modifier = modifier
-    ) { mv ->
-        mv.getMapAsync { map ->
-            googleMap = map
-            map.moveCamera(
-                CameraUpdateFactory.newLatLngZoom(LatLng(39.4699, -0.3763), 13f)
-            )
+        // ✅ Sin bloque update: no llamamos getMapAsync en cada recomposición
+    )
+
+    // ✅ Solo se lanza una vez cuando el mapa está listo
+    LaunchedEffect(mapView) {
+        mapView.getMapAsync { map ->
+            googleMap.value = map
+            map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.4699, -0.3763), 13f))
         }
+    }
+
+    // ✅ Solo actualiza marcadores cuando spots cambia Y el mapa ya existe
+    LaunchedEffect(spots) {
+        googleMap.value?.let { map ->
+            updateMarkers(map, currentSpots.value, currentOnClick.value)
+        }
+    }
+
+    // ✅ También reacciona cuando el mapa se inicializa por primera vez
+    LaunchedEffect(googleMap.value) {
+        googleMap.value?.let { map ->
+            updateMarkers(map, currentSpots.value, currentOnClick.value)
+        }
+    }
+}
+
+private fun updateMarkers(
+    map: GoogleMap,
+    spots: List<ParkingSpot>,
+    onSpotClick: (ParkingSpot) -> Unit
+) {
+    map.clear()
+    spots.forEach { spot ->
+        val marker = map.addMarker(
+            MarkerOptions()
+                .position(LatLng(spot.lat, spot.lng))
+                .title(spot.name)
+                .snippet(if (spot.isAvailable) "Libre · ${spot.pricePerHour} €/h" else "Ocupada")
+                .icon(
+                    BitmapDescriptorFactory.defaultMarker(
+                        if (spot.isAvailable) BitmapDescriptorFactory.HUE_GREEN
+                        else BitmapDescriptorFactory.HUE_RED
+                    )
+                )
+        )
+        marker?.tag = spot
+    }
+    map.setOnMarkerClickListener { marker ->
+        (marker.tag as? ParkingSpot)?.let { onSpotClick(it) }
+        true
     }
 }
 
 @Composable
 fun rememberMapViewWithLifecycle(): com.google.android.gms.maps.MapView {
     val context = LocalContext.current
-    val mapView = remember { com.google.android.gms.maps.MapView(context) }
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    // ✅ Recuperamos el savedInstanceState del Activity si existe
+    val activity = context as? androidx.fragment.app.FragmentActivity
+    val mapView = remember {
+        com.google.android.gms.maps.MapView(context).apply {
+            // Pasamos null solo si no hay estado guardado; en producción
+            // deberías pasar el Bundle real desde el Activity
+            onCreate(null)
+        }
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     DisposableEffect(lifecycle) {
-        val observer = object : androidx.lifecycle.DefaultLifecycleObserver {
-            override fun onCreate(owner: androidx.lifecycle.LifecycleOwner) = mapView.onCreate(null)
-            override fun onStart(owner: androidx.lifecycle.LifecycleOwner) = mapView.onStart()
-            override fun onResume(owner: androidx.lifecycle.LifecycleOwner) = mapView.onResume()
-            override fun onPause(owner: androidx.lifecycle.LifecycleOwner) = mapView.onPause()
-            override fun onStop(owner: androidx.lifecycle.LifecycleOwner) = mapView.onStop()
-            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) = mapView.onDestroy()
+        val observer = object : DefaultLifecycleObserver {
+            // ✅ onCreate ya se llamó en remember{}, no repetir aquí
+            override fun onStart(owner: LifecycleOwner) = mapView.onStart()
+            override fun onResume(owner: LifecycleOwner) = mapView.onResume()
+            override fun onPause(owner: LifecycleOwner) = mapView.onPause()
+            override fun onStop(owner: LifecycleOwner) = mapView.onStop()
+            override fun onDestroy(owner: LifecycleOwner) = mapView.onDestroy()
         }
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }

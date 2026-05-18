@@ -53,19 +53,17 @@ fun NavGraph(
                 onReserveSpot = { spot ->
                     val json = java.net.URLEncoder.encode(
                         Json.encodeToString(ParkingSpot.serializer(), spot), "UTF-8")
-                    navController.navigate("${Screen.Booking.route}/$json")
+                    navController.navigate("${Screen.Booking.route}/${spot.id}")
                 }
             )
         }
 
         composable(
-            route     = "${Screen.Booking.route}/{spotJson}",
-            arguments = listOf(navArgument("spotJson") { type = NavType.StringType })
+            route = "${Screen.Booking.route}/{spotId}",
+            arguments = listOf(navArgument("spotId") { type = NavType.IntType })
         ) { backStack ->
-            val raw  = backStack.arguments?.getString("spotJson") ?: ""
-            val spot = Json.decodeFromString(ParkingSpot.serializer(),
-                java.net.URLDecoder.decode(raw, "UTF-8"))
-            BookingScreen(spot = spot, navController = navController)
+            val spotId = backStack.arguments?.getInt("spotId") ?: return@composable
+            BookingScreen(spotId = spotId, navController = navController)
         }
 
         composable(Screen.Favourites.route)     { FavouritesScreen(navController) }

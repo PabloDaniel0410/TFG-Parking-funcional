@@ -33,7 +33,7 @@ fun ProfileScreen(
     navController: NavController,
     vm: ProfileViewModel = viewModel()
 ) {
-    val user    = remember { Supabase.client.auth.currentUserOrNull() }
+    val currentUser = Supabase.client.auth.currentUserOrNull()
     val profile by vm.profile.collectAsState()
     val context = LocalContext.current
 
@@ -103,11 +103,11 @@ fun ProfileScreen(
 
             // ── Nombre y email ──────────────────────────────────────
             Text(
-                profile?.displayName?.ifBlank { user?.email ?: "" } ?: (user?.email ?: ""),
+                profile?.displayName?.ifBlank { currentUser?.email ?: "" } ?: (currentUser?.email ?: ""),
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                user?.email ?: "",
+                currentUser?.email ?: "",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline
             )

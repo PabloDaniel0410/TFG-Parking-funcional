@@ -21,7 +21,9 @@ class FavouritesViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(FavouritesUiState())
     val uiState: StateFlow<FavouritesUiState> = _uiState
 
-    init { fetchFavourites() }
+    init {
+        fetchFavourites()
+    }
 
     fun fetchFavourites() {
         viewModelScope.launch {
@@ -45,10 +47,11 @@ class FavouritesViewModel : ViewModel() {
     fun removeFavourite(id: Int) {
         viewModelScope.launch {
             try {
-                Supabase.client
-                    .postgrest["favourites"]
-                    .delete { filter { eq("id", id) } }
-                fetchFavourites()
+                Supabase.client.postgrest["favourites"].delete { filter { eq("id", id) } }
+                // Actualiza el estado local directamente
+                _uiState.value = _uiState.value.copy(
+                    favourites = _uiState.value.favourites.filter { it.id != id }
+                )
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message ?: "Error al eliminar")
             }
