@@ -23,6 +23,7 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MarkerOptions
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +34,13 @@ fun HomeScreen(
 ) {
     val state        by vm.uiState.collectAsState()
     var selectedSpot by remember { mutableStateOf<ParkingSpot?>(null) }
+
+    // ✅ Retrasamos la composición del mapa 1 frame para no bloquear el primer render
+    var showMap by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(100)   // deja que la UI inicial se pinte antes de inicializar el mapa
+        showMap = true
+    }
 
     Scaffold(
         topBar = {
@@ -76,11 +84,23 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            MapView(
-                spots       = state.spots,
-                onSpotClick = { selectedSpot = it },
-                modifier    = Modifier.fillMaxSize()
-            )
+            if (showMap) {
+                MapView(
+                    spots       = state.spots,
+                    onSpotClick = { selectedSpot = it },
+                    modifier    = Modifier.fillMaxSize()
+                )
+            } else {
+                // Placeholder mientras Maps inicializa — evita el jank en el primer frame
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(padding),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
 
             if (state.isLoading) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center))
@@ -101,7 +121,7 @@ fun HomeScreen(
                 )
             }
 
-            if (selectedSpot == null) {
+            if (selectedSpot == null && showMap) {
                 FloatingActionButton(
                     onClick  = { vm.fetchSpots() },
                     modifier = Modifier
@@ -115,24 +135,22 @@ fun HomeScreen(
     }
 }
 
-// ─── MapView con ciclo de vida correcto ───────────────────────────────────────
 @Composable
 fun MapView(
     spots: List<ParkingSpot>,
     onSpotClick: (ParkingSpot) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context         = LocalContext.current
-    val googleMap       = remember { mutableStateOf<GoogleMap?>(null) }
-    val currentSpots    = rememberUpdatedState(spots)
-    val currentOnClick  = rememberUpdatedState(onSpotClick)
+    val context      = LocalContext.current
+    val googleMap    = remember { mutableStateOf<GoogleMap?>(null) }
+    val currentSpots = rememberUpdatedState(spots)
+    val currentClick = rememberUpdatedState(onSpotClick)
 
-    val mapView = remember {
-        com.google.android.gms.maps.MapView(context).apply { onCreate(null) }
-    }
+    val mapView = remember { com.google.android.gms.maps.MapView(context) }
 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
+        mapView.onCreate(null)
         val observer = object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner)   = mapView.onStart()
             override fun onResume(owner: LifecycleOwner)  = mapView.onResume()
@@ -146,19 +164,17 @@ fun MapView(
 
     AndroidView(factory = { mapView }, modifier = modifier)
 
-    // ✅ Inicializa el mapa una sola vez
     LaunchedEffect(Unit) {
         mapView.getMapAsync { map ->
             googleMap.value = map
             map.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(39.4699, -0.3763), 13f))
-            updateMarkers(map, currentSpots.value, currentOnClick.value)
+            updateMarkers(map, currentSpots.value, currentClick.value)
         }
     }
 
-    // ✅ Actualiza marcadores solo cuando cambian los spots
     LaunchedEffect(spots) {
         googleMap.value?.let { map ->
-            updateMarkers(map, currentSpots.value, currentOnClick.value)
+            updateMarkers(map, currentSpots.value, currentClick.value)
         }
     }
 }
