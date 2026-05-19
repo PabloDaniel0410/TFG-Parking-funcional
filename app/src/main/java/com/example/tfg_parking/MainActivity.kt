@@ -16,8 +16,14 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContent {
             val context = this
-            val darkMode    by ThemePreferences.darkModeFlow(context).collectAsState(initial = false)
-            val accentColor by ThemePreferences.accentColorFlow(context).collectAsState(initial = "blue")
+
+            // ✅ produceState lanza la colección en un coroutine, no bloquea el hilo principal
+            val darkMode by produceState(initialValue = false) {
+                ThemePreferences.darkModeFlow(context).collect { value = it }
+            }
+            val accentColor by produceState(initialValue = "blue") {
+                ThemePreferences.accentColorFlow(context).collect { value = it }
+            }
 
             TFGParkingTheme(darkTheme = darkMode, accentColor = accentColor) {
                 val navController = rememberNavController()

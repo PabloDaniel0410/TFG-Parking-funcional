@@ -24,12 +24,13 @@ class HomeViewModel : ViewModel() {
 
     fun fetchSpots() {
         viewModelScope.launch {
-            _uiState.value = HomeUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val spots = Supabase.client
                     .postgrest["parking_spots"]
                     .select()
                     .decodeList<ParkingSpot>()
+                    .take(100)   // Limita a 100 spots para evitar ANR en el hilo principal
                 _uiState.value = HomeUiState(spots = spots)
             } catch (e: Exception) {
                 _uiState.value = HomeUiState(error = e.message ?: "Error cargando plazas")
