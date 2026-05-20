@@ -7,11 +7,20 @@ import com.example.tfg_parking.data.model.Vehicle
 import com.example.tfg_parking.data.remote.Supabase
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+@Serializable
+private data class UserBalanceRow(
+    val balance: Double = 0.0
+)
 
 data class HomeUiState(
     val spots: List<ParkingSpot> = emptyList(),
@@ -19,7 +28,9 @@ data class HomeUiState(
     val error: String? = null,
     val favouriteSpotIds: Set<Int> = emptySet(),
     val userVehicles: List<Vehicle> = emptyList(),
-    val availableCount: Int = 0
+    val availableCount: Int = 0,
+    // Saldo del usuario para bloquear reservas sin fondos
+    val userBalance: Double = 0.0
 )
 
 class HomeViewModel : ViewModel() {
@@ -27,37 +38,39 @@ class HomeViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState
 
-    private var currentPage = 0
     private val pageSize = 100
-    private val allSpots = mutableListOf<ParkingSpot>()
+    private var cameraJob: Job? = null
 
     init {
-        fetchSpots()
+        fetchSpotsNear(lat = 39.4699, lng = -0.3763, radiusKm = 2.0)
         fetchUserVehicles()
         fetchFavouriteIds()
+        fetchAvailableCount()
+        fetchUserBalance()
     }
 
-    fun fetchSpots(page: Int = 0) {
+    // Carga plazas dentro de un bounding box centrado en lat/lng
+    fun fetchSpotsNear(lat: Double, lng: Double, radiusKm: Double = 1.5) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val from = page * pageSize
-                val to = from + pageSize - 1
+                val deltaLat = radiusKm / 111.0
+                val deltaLng = radiusKm / (111.0 * Math.cos(Math.toRadians(lat)))
+
                 val spots = Supabase.client
                     .postgrest["parking_spots"]
-                    .select { range(from.toLong(), to.toLong()) }
+                    .select {
+                        filter {
+                            gte("lat", lat - deltaLat)
+                            lte("lat", lat + deltaLat)
+                            gte("lng", lng - deltaLng)
+                            lte("lng", lng + deltaLng)
+                        }
+                        range(0L, (pageSize - 1).toLong())
+                    }
                     .decodeList<ParkingSpot>()
 
-                if (page == 0) allSpots.clear()
-                allSpots.addAll(spots)
-                currentPage = page
-
-                val available = allSpots.count { it.status == "available" || it.isAvailable }
-                _uiState.value = _uiState.value.copy(
-                    spots = allSpots.toList(),
-                    isLoading = false,
-                    availableCount = available
-                )
+                _uiState.value = _uiState.value.copy(spots = spots, isLoading = false)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -67,8 +80,44 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    fun fetchNextPage() {
-        fetchSpots(currentPage + 1)
+    // Debounce de 400ms al mover el mapa para no saturar Supabase
+    fun onCameraMoved(lat: Double, lng: Double) {
+        cameraJob?.cancel()
+        cameraJob = viewModelScope.launch {
+            delay(400)
+            fetchSpotsNear(lat, lng)
+        }
+    }
+
+    // Cuenta real de plazas disponibles en toda la base de datos
+    fun fetchAvailableCount() {
+        viewModelScope.launch {
+            try {
+                val result = Supabase.client
+                    .postgrest["parking_spots"]
+                    .select {
+                        filter { eq("status", "available") }
+                        count(io.github.jan.supabase.postgrest.query.Count.EXACT)
+                    }
+                    .decodeList<ParkingSpot>()
+                _uiState.value = _uiState.value.copy(availableCount = result.size)
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Carga el saldo del usuario desde user_balance
+    fun fetchUserBalance() {
+        viewModelScope.launch {
+            try {
+                val userId = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
+                val rows = Supabase.client
+                    .postgrest["user_balance"]
+                    .select { filter { eq("user_id", userId) } }
+                    .decodeList<UserBalanceRow>()
+                val balance = rows.firstOrNull()?.balance ?: 0.0
+                _uiState.value = _uiState.value.copy(userBalance = balance)
+            } catch (_: Exception) {}
+        }
     }
 
     fun fetchUserVehicles() {
@@ -80,7 +129,9 @@ class HomeViewModel : ViewModel() {
                     .select { filter { eq("user_id", userId) } }
                     .decodeList<Vehicle>()
                 _uiState.value = _uiState.value.copy(userVehicles = vehicles)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = "Error vehículos: ${e.message}")
+            }
         }
     }
 
@@ -107,9 +158,7 @@ class HomeViewModel : ViewModel() {
                 if (spot.id in current) {
                     Supabase.client.postgrest["favourites"]
                         .delete { filter { eq("spot_id", spot.id); eq("user_id", userId) } }
-                    _uiState.value = _uiState.value.copy(
-                        favouriteSpotIds = current - spot.id
-                    )
+                    _uiState.value = _uiState.value.copy(favouriteSpotIds = current - spot.id)
                 } else {
                     Supabase.client.postgrest["favourites"]
                         .insert(buildJsonObject {
@@ -118,9 +167,7 @@ class HomeViewModel : ViewModel() {
                             put("spot_name", spot.name)
                             put("address",   spot.address)
                         })
-                    _uiState.value = _uiState.value.copy(
-                        favouriteSpotIds = current + spot.id
-                    )
+                    _uiState.value = _uiState.value.copy(favouriteSpotIds = current + spot.id)
                 }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
@@ -136,26 +183,38 @@ class HomeViewModel : ViewModel() {
                     return@launch
                 }
 
-                val result = Supabase.client.postgrest.rpc(
+                // Verificación de saldo antes de llamar a la RPC
+                val balance = _uiState.value.userBalance
+                if (balance < spot.pricePerHour) {
+                    onResult(false, "Saldo insuficiente (%.2f € disponibles, se necesitan %.2f €)".format(balance, spot.pricePerHour))
+                    return@launch
+                }
+
+                Supabase.client.postgrest.rpc(
                     "reserve_spot",
                     buildJsonObject {
-                        put("p_spot_id",        spot.id)
-                        put("p_user_id",        userId)
-                        put("p_vehicle_plate",  vehiclePlate)
+                        put("p_spot_id",       spot.id)
+                        put("p_user_id",       userId)
+                        put("p_vehicle_plate", vehiclePlate)
                     }
                 )
 
-                fetchSpots(currentPage)
+                // Refresca saldo, spots y contador tras reserva exitosa
+                fetchUserBalance()
+                val lastSpot = _uiState.value.spots.firstOrNull()
+                if (lastSpot != null) fetchSpotsNear(lastSpot.lat, lastSpot.lng)
+                fetchAvailableCount()
                 onResult(true, "Plaza reservada correctamente")
             } catch (e: Exception) {
                 onResult(false, e.message ?: "Error al reservar")
             }
         }
     }
+
     fun refreshSpot(spotId: Int) {
         viewModelScope.launch {
             try {
-                val updatedList = allSpots.toMutableList()
+                val updatedList = _uiState.value.spots.toMutableList()
                 val idx = updatedList.indexOfFirst { it.id == spotId }
                 if (idx >= 0) {
                     val refreshed = Supabase.client
@@ -164,13 +223,7 @@ class HomeViewModel : ViewModel() {
                         .decodeList<ParkingSpot>()
                     if (refreshed.isNotEmpty()) {
                         updatedList[idx] = refreshed.first()
-                        allSpots.clear()
-                        allSpots.addAll(updatedList)
-                        val available = allSpots.count { it.status == "available" || it.isAvailable }
-                        _uiState.value = _uiState.value.copy(
-                            spots = allSpots.toList(),
-                            availableCount = available
-                        )
+                        _uiState.value = _uiState.value.copy(spots = updatedList)
                     }
                 }
             } catch (_: Exception) {}

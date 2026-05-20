@@ -13,7 +13,8 @@ import kotlinx.coroutines.launch
 data class HistoryUiState(
     val reservations: List<Reservation> = emptyList(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
+    val showClearConfirm: Boolean = false
 )
 
 class HistoryViewModel : ViewModel() {
@@ -25,19 +26,45 @@ class HistoryViewModel : ViewModel() {
 
     fun fetchHistory() {
         viewModelScope.launch {
-            _uiState.value = HistoryUiState(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val userId = Supabase.client.auth.currentUserOrNull()?.id ?: run {
-                    _uiState.value = HistoryUiState(error = "No hay sesión activa")
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = "No hay sesión activa")
                     return@launch
                 }
                 val reservations = Supabase.client
                     .postgrest["reservations"]
-                    .select { filter { eq("user_id", userId) } }
+                    .select {
+                        filter { eq("user_id", userId) }
+                        order("reserved_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                    }
                     .decodeList<Reservation>()
-                _uiState.value = HistoryUiState(reservations = reservations)
+                _uiState.value = _uiState.value.copy(isLoading = false, reservations = reservations)
             } catch (e: Exception) {
-                _uiState.value = HistoryUiState(error = e.message ?: "Error cargando historial")
+                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "Error cargando historial")
+            }
+        }
+    }
+
+    fun requestClearHistory() {
+        _uiState.value = _uiState.value.copy(showClearConfirm = true)
+    }
+
+    fun dismissClearConfirm() {
+        _uiState.value = _uiState.value.copy(showClearConfirm = false)
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, showClearConfirm = false)
+            try {
+                val userId = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
+                Supabase.client
+                    .postgrest["reservations"]
+                    .delete { filter { eq("user_id", userId) } }
+                _uiState.value = _uiState.value.copy(isLoading = false, reservations = emptyList())
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message ?: "Error al borrar historial")
             }
         }
     }

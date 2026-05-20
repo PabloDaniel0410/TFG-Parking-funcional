@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TFG-Parking"
+rootProject.name = "SmartPark"
 include(":app")

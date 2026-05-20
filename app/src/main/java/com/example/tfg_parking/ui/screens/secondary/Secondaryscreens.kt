@@ -10,12 +10,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.tfg_parking.data.model.Favourite
 import com.example.tfg_parking.data.model.Reservation
 import com.example.tfg_parking.navigation.Screen
+
+// ── Favourites ──────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,10 +100,31 @@ private fun FavouriteCard(favourite: Favourite, onRemove: () -> Unit) {
     }
 }
 
+// ── History ──────────────────────────────────────────────────────────────────
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(navController: NavController, vm: HistoryViewModel = viewModel()) {
     val state by vm.uiState.collectAsState()
+
+    // Diálogo de confirmación para borrar historial
+    if (state.showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { vm.dismissClearConfirm() },
+            icon  = { Icon(Icons.Default.DeleteForever, null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("¿Borrar historial?") },
+            text  = { Text("Se eliminarán todas tus reservas del historial. Esta acción no se puede deshacer.") },
+            confirmButton = {
+                Button(
+                    onClick = { vm.clearHistory() },
+                    colors  = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) { Text("Borrar todo") }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissClearConfirm() }) { Text("Cancelar") }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -112,6 +136,16 @@ fun HistoryScreen(navController: NavController, vm: HistoryViewModel = viewModel
                     }
                 },
                 actions = {
+                    // Botón borrar historial (solo visible si hay reservas)
+                    if (state.reservations.isNotEmpty()) {
+                        IconButton(onClick = { vm.requestClearHistory() }) {
+                            Icon(
+                                Icons.Default.DeleteForever,
+                                contentDescription = "Borrar historial",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                     IconButton(onClick = { vm.fetchHistory() }) {
                         Icon(Icons.Default.Refresh, "Actualizar")
                     }
@@ -165,19 +199,28 @@ private fun HistoryCard(reservation: Reservation) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(reservation.spotName, style = MaterialTheme.typography.titleSmall)
-                Text("${reservation.reservedAt.take(10)} · ${reservation.durationHours} h",
-                    style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "${reservation.reservedAt.take(10)} · ${reservation.durationHours} h",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 if (reservation.address.isNotBlank())
-                    Text(reservation.address, style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline)
+                    Text(
+                        reservation.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
             }
-            Text("%.2f €".format(reservation.totalPrice),
-                style = MaterialTheme.typography.titleMedium)
+            Text(
+                "%.2f €".format(reservation.totalPrice),
+                style = MaterialTheme.typography.titleMedium
+            )
         }
     }
 }
+
+// ── Bottom Bar compartida ─────────────────────────────────────────────────────
 
 @Composable
 fun AppBottomBar(navController: NavController, current: String) {
