@@ -11,5 +11,7 @@ data class UserProfile(
     val phone:                                   String  = "",
     @SerialName("dark_mode")    val darkMode:    Boolean = false,
     @SerialName("accent_color") val accentColor: String  = "blue",
-    @SerialName("updated_at")   val updatedAt:   String  = ""
+    @SerialName("updated_at")   val updatedAt:   String  = "",
+    // Saldo del usuario en la app
+    val balance: Double = 0.0
 )

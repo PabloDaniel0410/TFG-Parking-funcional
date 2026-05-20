@@ -23,7 +23,12 @@ class BookingViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(BookingUiState())
     val uiState: StateFlow<BookingUiState> = _uiState
 
-    fun reserve(spot: ParkingSpot, durationHours: Int) {
+    /**
+     * Confirma la llegada del usuario a la plaza reservada.
+     * Si llega antes de 30 min → Supabase devuelve la penalización al balance.
+     * NO se cobra nada aquí; el cobro fue en la reserva (HomeViewModel).
+     */
+    fun confirmArrival(spot: ParkingSpot, vehiclePlate: String) {
         viewModelScope.launch {
             _uiState.value = BookingUiState(isLoading = true)
             try {
@@ -31,20 +36,19 @@ class BookingViewModel : ViewModel() {
                     _uiState.value = BookingUiState(error = "No hay sesión activa")
                     return@launch
                 }
-                val totalPrice = spot.pricePerHour * durationHours
-                Supabase.client
-                    .postgrest["reservations"]
-                    .insert(buildJsonObject {
-                        put("user_id",        userId)
-                        put("spot_id",        spot.id)
-                        put("spot_name",      spot.name)
-                        put("address",        spot.address)
-                        put("duration_hours", durationHours)
-                        put("total_price",    totalPrice)
-                    })
+
+                Supabase.client.postgrest.rpc(
+                    "confirm_arrival",
+                    buildJsonObject {
+                        put("p_spot_id",       spot.id)
+                        put("p_user_id",       userId)
+                        put("p_vehicle_plate", vehiclePlate)
+                    }
+                )
+
                 _uiState.value = BookingUiState(isSuccess = true)
             } catch (e: Exception) {
-                _uiState.value = BookingUiState(error = e.message ?: "Error al reservar")
+                _uiState.value = BookingUiState(error = e.message ?: "Error al confirmar llegada")
             }
         }
     }

@@ -22,8 +22,6 @@ fun BookingScreen(
     vm: BookingViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsState()
-    var hours by remember { mutableIntStateOf(1) }
-    val total = spot.pricePerHour * hours
 
     LaunchedEffect(state.isSuccess) {
         if (state.isSuccess) {
@@ -36,7 +34,7 @@ fun BookingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Reservar plaza") },
+                title = { Text("Detalle de plaza") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Volver")
@@ -52,56 +50,75 @@ fun BookingScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Info de la plaza
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(spot.name, style = MaterialTheme.typography.titleMedium)
                     if (spot.address.isNotBlank())
                         Text(spot.address, style = MaterialTheme.typography.bodySmall)
-                    Text("${spot.pricePerHour} €/hora",
+                    Text(
+                        "${spot.pricePerHour} €/hora",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary)
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    val (statusLabel, statusColor) = when (spot.status) {
+                        "reserved" -> "Reservada" to MaterialTheme.colorScheme.tertiary
+                        "occupied" -> "Ocupada"   to MaterialTheme.colorScheme.error
+                        else       -> "Libre"     to MaterialTheme.colorScheme.primary
+                    }
+                    Text(statusLabel, color = statusColor, style = MaterialTheme.typography.labelMedium)
                 }
             }
 
-            Text("Duración", style = MaterialTheme.typography.titleSmall)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            // Nota informativa: la reserva se gestiona desde el mapa
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                )
             ) {
-                IconButton(onClick = { if (hours > 1) hours-- }, enabled = hours > 1) {
-                    Icon(Icons.Default.Remove, "Menos")
-                }
-                Text("$hours h", style = MaterialTheme.typography.headlineSmall)
-                IconButton(onClick = { if (hours < 24) hours++ }, enabled = hours < 24) {
-                    Icon(Icons.Default.Add, "Más")
+                Row(
+                    Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Info, null,
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Text(
+                        "Las reservas se realizan directamente desde el mapa pulsando sobre una plaza libre.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
 
-            HorizontalDivider()
+            // Si la plaza está reservada por este usuario, mostrar botón de confirmar llegada
+            if (spot.status == "reserved" && spot.assignedVehicle != null) {
+                Spacer(Modifier.weight(1f))
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("Total", style = MaterialTheme.typography.titleMedium)
-                Text("%.2f €".format(total),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary)
-            }
+                state.error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error)
+                }
 
-            Spacer(Modifier.weight(1f))
-
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-            Button(
-                onClick = { vm.reserve(spot, hours) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isLoading
-            ) {
-                if (state.isLoading) {
-                    CircularProgressIndicator(Modifier.size(18.dp),
-                        color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.BookmarkAdd, null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Confirmar reserva")
+                Button(
+                    onClick  = { vm.confirmArrival(spot, spot.assignedVehicle) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled  = !state.isLoading
+                ) {
+                    if (state.isLoading) {
+                        CircularProgressIndicator(
+                            Modifier.size(18.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(Icons.Default.CheckCircle, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("He llegado a la plaza")
+                    }
                 }
             }
         }
