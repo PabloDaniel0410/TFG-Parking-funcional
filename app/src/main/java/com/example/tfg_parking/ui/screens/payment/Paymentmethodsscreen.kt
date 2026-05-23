@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -22,12 +23,22 @@ import io.github.jan.supabase.postgrest.postgrest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+
+// ── Data class auxiliar para leer user_balance ─────────────────────────────
+@Serializable
+private data class UserBalanceRow(
+    @SerialName("user_id") val userId: String = "",
+    val balance: Double = 0.0
+)
 
 // ── ViewModel ──────────────────────────────────────────────────────────────
 data class PaymentUiState(
     val methods: List<PaymentMethod> = emptyList(),
+    val userBalance: Double = 0.0,   // saldo real de user_balance
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -36,30 +47,52 @@ class PaymentViewModel : ViewModel() {
     private val _state = MutableStateFlow(PaymentUiState())
     val state: StateFlow<PaymentUiState> = _state
 
-    init { load() }
+    init {
+        load()
+        loadUserBalance()
+    }
 
+    // Carga los métodos de pago
     fun load() {
         viewModelScope.launch {
-            _state.value = PaymentUiState(isLoading = true)
+            _state.value = _state.value.copy(isLoading = true, error = null)
             try {
                 val uid = Supabase.client.auth.currentUserOrNull()?.id ?: run {
-                    _state.value = PaymentUiState(error = "Sin sesión"); return@launch
+                    _state.value = _state.value.copy(isLoading = false, error = "Sin sesión")
+                    return@launch
                 }
                 val list = Supabase.client.postgrest["payment_methods"]
                     .select { filter { eq("user_id", uid) } }
                     .decodeList<PaymentMethod>()
-                _state.value = PaymentUiState(methods = list)
+                _state.value = _state.value.copy(methods = list, isLoading = false)
             } catch (e: Exception) {
-                _state.value = PaymentUiState(error = e.message)
+                _state.value = _state.value.copy(isLoading = false, error = e.message)
             }
         }
     }
 
+    // Carga el saldo real desde user_balance
+    fun loadUserBalance() {
+        viewModelScope.launch {
+            try {
+                val uid = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
+                val rows = Supabase.client.postgrest["user_balance"]
+                    .select { filter { eq("user_id", uid) } }
+                    .decodeList<UserBalanceRow>()
+                val balance = rows.firstOrNull()?.balance ?: 0.0
+                _state.value = _state.value.copy(userBalance = balance)
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Añade un método de pago Y acredita el saldo inicial en user_balance
     fun add(type: String, label: String, initialBalance: Double) {
         viewModelScope.launch {
             try {
                 val uid = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
                 val isFirst = _state.value.methods.isEmpty()
+
+                // 1. Insertar el método de pago
                 Supabase.client.postgrest["payment_methods"].insert(buildJsonObject {
                     put("user_id",     uid)
                     put("method_type", type)
@@ -67,7 +100,14 @@ class PaymentViewModel : ViewModel() {
                     put("balance",     initialBalance)
                     put("is_default",  isFirst)
                 })
+
+                // 2. Acreditar el saldo inicial en user_balance (upsert)
+                if (initialBalance > 0.0) {
+                    creditUserBalance(uid, initialBalance)
+                }
+
                 load()
+                loadUserBalance()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
             }
@@ -85,16 +125,46 @@ class PaymentViewModel : ViewModel() {
         }
     }
 
-    fun addBalance(id: Int, current: Double, amount: Double) {
+    // Recarga saldo: actualiza payment_methods Y user_balance
+    fun addBalance(id: Int, currentMethodBalance: Double, amount: Double) {
         viewModelScope.launch {
             try {
+                val uid = Supabase.client.auth.currentUserOrNull()?.id ?: return@launch
+
+                // 1. Actualizar el balance del método de pago concreto
                 Supabase.client.postgrest["payment_methods"]
-                    .update({ set("balance", current + amount) }) { filter { eq("id", id) } }
+                    .update({ set("balance", currentMethodBalance + amount) }) {
+                        filter { eq("id", id) }
+                    }
+
+                // 2. Acreditar la cantidad en user_balance (upsert sumando)
+                creditUserBalance(uid, amount)
+
                 load()
+                loadUserBalance()
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message)
             }
         }
+    }
+
+    // Función auxiliar: suma `amount` al saldo en user_balance haciendo upsert
+    private suspend fun creditUserBalance(uid: String, amount: Double) {
+        // Intentamos leer el saldo actual primero
+        val rows = Supabase.client.postgrest["user_balance"]
+            .select { filter { eq("user_id", uid) } }
+            .decodeList<UserBalanceRow>()
+
+        val currentBalance = rows.firstOrNull()?.balance ?: 0.0
+        val newBalance = currentBalance + amount
+
+        // Upsert: si existe actualiza, si no existe inserta
+        Supabase.client.postgrest["user_balance"].upsert(
+            buildJsonObject {
+                put("user_id", uid)
+                put("balance", newBalance)
+            }
+        )
     }
 }
 
@@ -102,9 +172,9 @@ class PaymentViewModel : ViewModel() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PaymentMethodsScreen(navController: NavController, vm: PaymentViewModel = viewModel()) {
-    val state      by vm.state.collectAsState()
-    var showAdd    by remember { mutableStateOf(false) }
-    var topUpFor   by remember { mutableStateOf<PaymentMethod?>(null) }
+    val state    by vm.state.collectAsState()
+    var showAdd  by remember { mutableStateOf(false) }
+    var topUpFor by remember { mutableStateOf<PaymentMethod?>(null) }
 
     Scaffold(
         topBar = {
@@ -130,26 +200,36 @@ fun PaymentMethodsScreen(navController: NavController, vm: PaymentViewModel = vi
                     state.error!!, Modifier.align(Alignment.Center).padding(24.dp),
                     color = MaterialTheme.colorScheme.error
                 )
-                state.methods.isEmpty() -> Column(
-                    Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Default.CreditCard, null, Modifier.size(48.dp),
-                        tint = MaterialTheme.colorScheme.outline)
-                    Text("No tienes métodos de pago", color = MaterialTheme.colorScheme.outline)
-                }
                 else -> LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(state.methods, key = { it.id }) { method ->
-                        PaymentCard(
-                            method   = method,
-                            onDelete = { vm.delete(method.id) },
-                            onTopUp  = { topUpFor = method }
-                        )
+                    // Tarjeta de saldo total real en la parte superior
+                    item {
+                        TotalBalanceCard(balance = state.userBalance)
+                    }
+
+                    if (state.methods.isEmpty()) {
+                        item {
+                            Column(
+                                Modifier.fillMaxWidth().padding(top = 32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(Icons.Default.CreditCard, null, Modifier.size(48.dp),
+                                    tint = MaterialTheme.colorScheme.outline)
+                                Text("No tienes métodos de pago", color = MaterialTheme.colorScheme.outline)
+                            }
+                        }
+                    } else {
+                        items(state.methods, key = { it.id }) { method ->
+                            PaymentCard(
+                                method   = method,
+                                onDelete = { vm.delete(method.id) },
+                                onTopUp  = { topUpFor = method }
+                            )
+                        }
                     }
                 }
             }
@@ -178,6 +258,42 @@ fun PaymentMethodsScreen(navController: NavController, vm: PaymentViewModel = vi
     }
 }
 
+// ── Tarjeta de saldo total ─────────────────────────────────────────────────
+@Composable
+private fun TotalBalanceCard(balance: Double) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Row(
+            Modifier.padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    "Saldo SmartPark",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Text(
+                    "%.2f €".format(balance),
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = if (balance >= 0) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.error
+                )
+            }
+            Icon(
+                Icons.Default.AccountBalanceWallet,
+                null,
+                Modifier.size(40.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+// ── Tarjeta de método de pago ──────────────────────────────────────────────
 @Composable
 private fun PaymentCard(
     method: PaymentMethod,
@@ -185,9 +301,9 @@ private fun PaymentCard(
     onTopUp: () -> Unit
 ) {
     val icon = when (method.methodType) {
-        "paypal"  -> Icons.Default.AccountBalanceWallet
-        "wallet"  -> Icons.Default.Wallet
-        else      -> Icons.Default.CreditCard
+        "paypal" -> Icons.Default.AccountBalanceWallet
+        "wallet" -> Icons.Default.Wallet
+        else     -> Icons.Default.CreditCard
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
@@ -211,36 +327,31 @@ private fun PaymentCard(
                         onClick = {},
                         label = { Text("Principal", style = MaterialTheme.typography.labelSmall) }
                     )
+                    Spacer(Modifier.width(4.dp))
                 }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.error)
                 }
             }
 
-            // Saldo
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
+
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Saldo disponible", style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline)
-                    Text("%.2f €".format(method.balance),
-                        style = MaterialTheme.typography.titleLarge,
-                        color = MaterialTheme.colorScheme.primary)
-                }
                 OutlinedButton(onClick = onTopUp) {
                     Icon(Icons.Default.Add, null, Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Recargar")
+                    Text("Recargar saldo")
                 }
             }
         }
     }
 }
 
+// ── Diálogo añadir método ──────────────────────────────────────────────────
 @Composable
 private fun AddPaymentDialog(
     onDismiss: () -> Unit,
@@ -291,6 +402,7 @@ private fun AddPaymentDialog(
     )
 }
 
+// ── Diálogo recargar saldo ─────────────────────────────────────────────────
 @Composable
 private fun TopUpDialog(
     method: PaymentMethod,
@@ -305,9 +417,15 @@ private fun TopUpDialog(
         title = { Text("Recargar saldo") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Saldo actual: %.2f €".format(method.balance),
-                    style = MaterialTheme.typography.bodyMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Método: ${method.label}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     presets.forEach { preset ->
                         SuggestionChip(
                             onClick = { amount = preset.toInt().toString() },
@@ -317,16 +435,17 @@ private fun TopUpDialog(
                 }
                 OutlinedTextField(
                     value = amount,
-                    onValueChange = { amount = it },
+                    onValueChange = { v -> if (v.all { it.isDigit() || it == '.' }) amount = v },
                     label = { Text("Cantidad (€)") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    leadingIcon = { Icon(Icons.Default.Euro, null) }
                 )
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { amount.toDoubleOrNull()?.let { onTopUp(it) } },
-                enabled = amount.toDoubleOrNull() != null
+                onClick = { amount.toDoubleOrNull()?.let { if (it > 0) onTopUp(it) } },
+                enabled = (amount.toDoubleOrNull() ?: 0.0) > 0.0
             ) { Text("Recargar") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } }
