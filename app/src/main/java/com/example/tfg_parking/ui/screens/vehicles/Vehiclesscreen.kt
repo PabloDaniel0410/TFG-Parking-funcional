@@ -85,7 +85,7 @@ class VehiclesViewModel : ViewModel() {
     }
 }
 
-// ── Screen ─────────────────────────────────────────────────────────────────
+// ── Pantalla ─────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VehiclesScreen(navController: NavController, vm: VehiclesViewModel = viewModel()) {

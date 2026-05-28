@@ -116,7 +116,7 @@ fun ProfileScreen(
             HorizontalDivider()
             Spacer(Modifier.height(8.dp))
 
-            // ── Menú ────────────────────────────────────────────────
+            // ── Menu ────────────────────────────────────────────────
             Text("Cuenta", style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp))

@@ -71,7 +71,7 @@ fun BookingScreen(
                 }
             }
 
-            // Nota informativa: la reserva se gestiona desde el mapa
+
             Card(
                 Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -95,7 +95,7 @@ fun BookingScreen(
                 }
             }
 
-            // Si la plaza está reservada por este usuario, mostrar botón de confirmar llegada
+            // Si la plaza está reservada por este usuario deberia  mostrar botón de confirmar llegada
             if (spot.status == "reserved" && spot.assignedVehicle != null) {
                 Spacer(Modifier.weight(1f))
 

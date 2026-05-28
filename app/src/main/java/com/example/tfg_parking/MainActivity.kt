@@ -18,7 +18,7 @@ class MainActivity : AppCompatActivity(), OnMapsSdkInitializedCallback {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ✅ Pre-inicializa Maps de forma asíncrona para evitar bloqueo en el hilo principal
+
         MapsInitializer.initialize(applicationContext, Renderer.LATEST, this)
 
         enableEdgeToEdge()
@@ -40,6 +40,6 @@ class MainActivity : AppCompatActivity(), OnMapsSdkInitializedCallback {
     }
 
     override fun onMapsSdkInitialized(renderer: Renderer) {
-        // no-op: solo necesitamos que la inicialización ocurra antes de setContent
+
     }
 }

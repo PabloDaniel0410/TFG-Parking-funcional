@@ -89,19 +89,20 @@ class HomeViewModel : ViewModel() {
         }
     }
 
-    // Cuenta real de plazas disponibles en toda la base de datos
+    // Cuenta real de plazas disponibles en toda la base de datos via RPC
     fun fetchAvailableCount() {
         viewModelScope.launch {
             try {
-                val result = Supabase.client
-                    .postgrest["parking_spots"]
-                    .select {
-                        filter { eq("status", "available") }
-                        count(io.github.jan.supabase.postgrest.query.Count.EXACT)
-                    }
-                    .decodeList<ParkingSpot>()
-                _uiState.value = _uiState.value.copy(availableCount = result.size)
-            } catch (_: Exception) {}
+                // Llamamos a la función SQL count_available_spots() definida en Supabase
+                val result = Supabase.client.postgrest
+                    .rpc("count_available_spots", kotlinx.serialization.json.buildJsonObject {})
+                val count = result.data.trim().trimStart('[').trimEnd(']').toIntOrNull() ?: 0
+                _uiState.value = _uiState.value.copy(availableCount = count)
+            } catch (_: Exception) {
+                // Fallback: contar desde los spots cargados localmente
+                val local = _uiState.value.spots.count { it.status == "available" }
+                _uiState.value = _uiState.value.copy(availableCount = local)
+            }
         }
     }
 
@@ -200,6 +201,8 @@ class HomeViewModel : ViewModel() {
                 )
 
                 // Refresca saldo, spots y contador tras reserva exitosa
+                // Pequeña pausa para que Supabase procese el trigger antes de leer
+                kotlinx.coroutines.delay(500)
                 fetchUserBalance()
                 val lastSpot = _uiState.value.spots.firstOrNull()
                 if (lastSpot != null) fetchSpotsNear(lastSpot.lat, lastSpot.lng)
@@ -208,6 +211,17 @@ class HomeViewModel : ViewModel() {
             } catch (e: Exception) {
                 onResult(false, e.message ?: "Error al reservar")
             }
+        }
+    }
+
+    // Refresca todo (llamar al volver a la pantalla o al pulsar el FAB)
+    fun refreshAll() {
+        fetchUserBalance()
+        fetchAvailableCount()
+        val spots = _uiState.value.spots
+        if (spots.isNotEmpty()) {
+            val center = spots.first()
+            fetchSpotsNear(center.lat, center.lng)
         }
     }
 

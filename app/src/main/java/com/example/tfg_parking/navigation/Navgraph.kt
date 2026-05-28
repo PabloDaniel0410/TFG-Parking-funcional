@@ -57,7 +57,6 @@ fun NavGraph(
             HomeScreen(
                 navController = navController,
                 onReserveSpot = { spot ->
-                    // Uri.encode es más seguro que URLEncoder con Compose Navigation
                     val json = Uri.encode(Json.encodeToString(ParkingSpot.serializer(), spot))
                     navController.navigate("${Screen.Booking.route}/$json")
                 }
@@ -69,7 +68,7 @@ fun NavGraph(
             arguments = listOf(navArgument("spotJson") { type = NavType.StringType })
         ) { backStack ->
             val raw  = backStack.arguments?.getString("spotJson") ?: ""
-            // runCatching evita crash si el JSON llega malformado
+
             val spot = runCatching {
                 Json.decodeFromString(ParkingSpot.serializer(), raw)
             }.getOrNull() ?: return@composable

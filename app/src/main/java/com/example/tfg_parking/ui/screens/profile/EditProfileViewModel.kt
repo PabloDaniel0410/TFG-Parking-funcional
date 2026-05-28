@@ -49,7 +49,7 @@ class EditProfileViewModel : ViewModel() {
                         put("display_name", displayName)
                         put("phone",        phone)
                     })
-                // Contraseña sólo si se rellenó
+                // Contraseña sólo si ha  rellenao
                 if (newPassword.isNotBlank()) {
                     if (newPassword != confirmPassword) {
                         _uiState.value = EditProfileUiState(error = "Las contraseñas no coinciden")

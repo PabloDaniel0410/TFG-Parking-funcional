@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.tfg_parking.data.model.ParkingSpot
@@ -94,6 +95,14 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         delay(100)
         showMap = true
+    }
+
+    // Refresca saldo y contador cada vez que la pantalla vuelve a primer plano
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            vm.refreshAll()
+        }
     }
 
     Scaffold(
@@ -210,7 +219,7 @@ fun HomeScreen(
 
             if (selectedSpot == null && showMap) {
                 FloatingActionButton(
-                    onClick  = { vm.fetchAvailableCount() },
+                    onClick  = { vm.refreshAll() },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp)
                 ) {
                     Icon(Icons.Default.Refresh, "Actualizar")
@@ -339,7 +348,7 @@ private fun SpotBottomCard(
     val isReserved  = spot.status == "reserved"
     val isAvailable = !isOccupied && !isReserved
 
-    // Contador regresivo para plazas reservadas
+    // Cuenta atras para plazas reservadas
     LaunchedEffect(spot.id, isReserved) {
         if (isReserved) {
             spot.reservedAtTs?.let { ts ->
@@ -357,7 +366,7 @@ private fun SpotBottomCard(
                 delay(1000)
                 secondsLeft--
             }
-            // Tiempo expirado → notifica al padre para mostrar el diálogo de penalización
+            // Tiempo expirado = notifica al padre para mostrar el diálogo de penalización
             if (secondsLeft == 0) onTimeExpired()
         }
     }
@@ -440,7 +449,7 @@ private fun SpotBottomCard(
                 }
             }
 
-            // Contador regresivo solo en plazas reservadas
+            // Cuenta atras solo en plazas reservadas
             if (isReserved) {
                 Spacer(Modifier.height(8.dp))
                 val min   = secondsLeft / 60
@@ -478,7 +487,7 @@ private fun SpotBottomCard(
                 }
             }
 
-            // Botón reservar: solo si disponible Y saldo suficiente
+            // Botón reservar: solo si disponible Y si hay  saldo suficiente
             if (isAvailable) {
                 Spacer(Modifier.height(12.dp))
                 val hasFunds = userBalance >= spot.pricePerHour

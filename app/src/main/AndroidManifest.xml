@@ -18,7 +18,7 @@
         android:theme="@style/Theme.TFGParking"
         tools:targetApi="31">
 
-        <!-- ✅ FIX ANR: deshabilita EmojiCompatInitializer que bloqueaba el hilo principal ~2.5s -->
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"

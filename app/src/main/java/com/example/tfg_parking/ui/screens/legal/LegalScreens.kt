@@ -55,7 +55,7 @@ TFG Parking recopila únicamente los datos necesarios para el funcionamiento de 
 
 Tus datos no se venden ni se ceden a terceros. Puedes solicitar la eliminación de tu cuenta y todos sus datos asociados contactando con el equipo de desarrollo.
 
-Última actualización: mayo 2025.
+Última actualización: mayo 2026.
         """.trimIndent(),
         navController = navController
     )
@@ -84,7 +84,7 @@ Al usar TFG Parking aceptas las siguientes condiciones:
 5. Modificaciones
    Estos términos pueden actualizarse sin previo aviso. El uso continuado de la app implica la aceptación de los cambios.
 
-Última actualización: mayo 2025.
+Última actualización: mayo 2026.
         """.trimIndent(),
         navController = navController
     )
@@ -108,7 +108,7 @@ Tecnologías utilizadas:
 
 Desarrollado con Android Studio.
 
-© 2025 — Todos los derechos reservados.
+© 2026 — Todos los derechos reservados.
         """.trimIndent(),
         navController = navController
     )
